@@ -27,11 +27,11 @@ namespace ClassLibraryForQrCode
         public void setNewText(string newText)
         {
             textForCoding = newText;
-            EncodingMode encodingMode = EncodingMode.Numeric;
+            EncodingMode encodingMode = default;
             stringOfCode = QrCodeMagicBuilder.ToQrCode(
                 textForCoding,
                 ref qrCodeVersion,
-                ref encodingMode,
+                ref encoding,
                 ref errCorelation,
                 ref mask);
         }

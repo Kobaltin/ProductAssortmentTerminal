@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Diagnostics;
+using System.Reflection;
 using System.Text;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -12,58 +13,96 @@ namespace ClassLibraryForQrCode
  /// </summary>
  public static string ToQrCode(this string text, ref QR qrCodeVersion, ref EncodingMode codeType, ref EccLevel? needCorrectionLevel, ref Mask? maskNum, bool invert = false)
         {
-// Этап 1. Полный блок с данными +  подходящий уровень коррекции ошибок +нужная версия QR-кода
-// Вроде как тут нужно вызвать две функции
-//
-// 1.1 Сначала определяем способ кодирования
-// 1.2 Определяем подходящий под настройки: уровень коррекции ошибок и версию кода,
-// а так же сам текст для кодирования со служебной информацией
-// ------------------------------------------------------------------------------------------------------------------------------------------
-// Этап 2. Блоки с данными + байты коррекции
-// А тут аж все 4
-//
-// 2.1 Определяем длину из словаря
-// 2.2 На основе текста для кодирования из 1.2 и длины -определяем полный текст для кодирования
-// 2.3 По версии кода и уровню коррекции ошибок -получаем из словаря количество блоков
-// 2.4 Формируем список блоков из данных 2.2 и 2.3
-// 2.5 Создаем пустой список блоков коррекции
-//
-// 2.6 В цикле по блокам из 2.4:
-// 2.6.1 Определяем размер из справочнике на основе данных уровня коррекции и версии кода
-// 2.6.2 Добавляем в список 2.5 блок коррекции, полученный на основе блока 2.6 и размера из 2.6.1
-//
-// 2.7 На основе списка блоков 2.4 и блоков коррекции 2.5 получаем строку с данными
-// ------------------------------------------------------------------------------------------------------------------------------------------
-// Этап 3. Создание матрицы QR кода c лучшей маской
-// Тут всего 1 функция, но нужно добавить выбор, какую именно вызывать
-//
-// 3.1 Инициализируем блок данных, с версией, уровнем коррекции и данными 2.7
-// 3.2 В зависимости от наличии определенной маски формируем матрицу кода, которая будет представлена в виде списка блоков
-// 3.2.1 Если макса задана, передаем ее номер
-// 3.2.2 Если маска не задана, передаем ссылку на этот входной параметр, и функция помимо формирования матрицы определит оптимальный номер
-// ------------------------------------------------------------------------------------------------------------------------------------------
-// Этап 4.
-// Достаточно вызова одной функции, чтобы вернуть строку
-//
-// 4.1 На основе данных по матрице и флага инвертирования, формируем готовую строку кода
- return text;
+            // Этап 1. Полный блок с данными +  подходящий уровень коррекции ошибок +нужная версия QR-кода
+            // Вроде как тут нужно вызвать две функции
+            //
+            // 1.1 Сначала определяем способ кодирования
+            
+            bool numeric = true;
+            bool numericLeters = true;
+            foreach (char c in text)
+            {
+                if (!(c >= '0' && c <= '9')) numeric = false;
+            }
+            if(numeric) codeType = EncodingMode.Numeric;
+            else
+            {
+                foreach (char c in text)
+                {
+                    if (!((c >= '0' && c <= '9') ||
+                       (c >= 'A' && c <= 'Z') ||
+                        c == ' ' || c == '$' || c == '%' || c == '*' ||
+                        c == '+' || c == '-' || c == '.' || c == '/' || c == ':')) numericLeters = false;
+                }
+                if(numericLeters) codeType = EncodingMode.AlphaNumeric;
+                else
+                {
+                    bool kandji = true;
+                    foreach (char c in text)
+                    {
+                        bool isKanji =
+                                    (c >= '\u4E00' && c <= '\u9FFF') || 
+                                    (c >= '\u3400' && c <= '\u4DBF') || 
+                                    (c >= '\uF900' && c <= '\uFAFF');
+                        if (!isKanji) {
+                            kandji = false;
+                            break;
+                        }
+                    }
+                    if(kandji) codeType = EncodingMode.Kanji;
+                    else codeType = EncodingMode.Binary;
+                }
+            }
+
+            string encodedString = selectionOfTheEncodingFunction(text, codeType);
+            // 1.2 Определяем подходящий под настройки: уровень коррекции ошибок и версию кода
+            // а так же сам текст для кодирования со служебной информацией
+            (string a, EccLevel b, QR c) codeEccLevelQR = findEccLevelQRText(text, encodedString, codeType, qrCodeVersion, needCorrectionLevel);
+            // ------------------------------------------------------------------------------------------------------------------------------------------
+            // Этап 2. Блоки с данными + байты коррекции
+            // А тут аж все 4
+            int lenght = _maxData[(codeEccLevelQR.b, codeEccLevelQR.c)];
+                // 2.1 Определяем длину из словаря
+                // 2.2 На основе текста для кодирования из 1.2 и длины -определяем полный текст для кодирования
+                // 2.3 По версии кода и уровню коррекции ошибок -получаем из словаря количество блоков
+                // 2.4 Формируем список блоков из данных 2.2 и 2.3
+                // 2.5 Создаем пустой список блоков коррекции
+                //
+                // 2.6 В цикле по блокам из 2.4:
+                // 2.6.1 Определяем размер из справочнике на основе данных уровня коррекции и версии кода
+                // 2.6.2 Добавляем в список 2.5 блок коррекции, полученный на основе блока 2.6 и размера из 2.6.1
+                //
+                // 2.7 На основе списка блоков 2.4 и блоков коррекции 2.5 получаем строку с данными
+                // ------------------------------------------------------------------------------------------------------------------------------------------
+                // Этап 3. Создание матрицы QR кода c лучшей маской
+                // Тут всего 1 функция, но нужно добавить выбор, какую именно вызывать
+                //
+                // 3.1 Инициализируем блок данных, с версией, уровнем коррекции и данными 2.7
+                // 3.2 В зависимости от наличии определенной маски формируем матрицу кода, которая будет представлена в виде списка блоков
+                // 3.2.1 Если макса задана, передаем ее номер
+                // 3.2.2 Если маска не задана, передаем ссылку на этот входной параметр, и функция помимо формирования матрицы определит оптимальный номер
+                // ------------------------------------------------------------------------------------------------------------------------------------------
+                // Этап 4.
+                // Достаточно вызова одной функции, чтобы вернуть строку
+                //
+                // 4.1 На основе данных по матрице и флага инвертирования, формируем готовую строку кода
+                return text;
         }
         #endregion
         #region Magic
         /// <summary>
         /// Magic
         /// </summary>
-        private static string Magic(string a,
-       EncodingMode b)
+        private static string selectionOfTheEncodingFunction(string a, EncodingMode b)
         {
             var sb = new StringBuilder();
             var tmp = b switch
             {
                 EncodingMode.AlphaNumeric =>
-               Magic2(a.ToUpper()),
+               alphaNumericCoding(a.ToUpper()),
                 EncodingMode.Numeric =>
-               Magic3(a),
-                _ => Magic4(a)
+               numericCoding(a),
+                _ => binaryCoding(a)
             };
             foreach (var str in tmp)
                 sb.Append(str);
@@ -72,7 +111,7 @@ namespace ClassLibraryForQrCode
         /// <summary>
         /// Magic
         /// </summary>
-        private static (string a, EccLevel b, QR c) Magic(string a, string b, EncodingMode c, QR d, EccLevel? e = null)
+        private static (string a, EccLevel b, QR c) findEccLevelQRText(string a, string b, EncodingMode c, QR d, EccLevel? e = null)
         {
             if (d == NA)
                 throw new
@@ -99,8 +138,7 @@ namespace ClassLibraryForQrCode
             }
             foreach (var found in _maxData
             .Where(v => v.Key.version == d)
-            .OrderByDescending(x =>
-           x.Key.correctionLevel)
+            .OrderByDescending(x => x.Key.correctionLevel)
             .Where(x => length < x.Value))
                 return (sb.ToString(),
                found.Key.correctionLevel,
@@ -108,28 +146,28 @@ namespace ClassLibraryForQrCode
             if ((int)d > 20)
                 throw new
                NotSupportedException($"Current QR-code does not support data length { length } yet!");
-        return Magic(a, b, c, d + 1, e);
+        return findEccLevelQRText(a, b, c, d + 1, e);
         }
         private static readonly char[]
        letterNumberArray = {
 
-'0','1','2','3','4','5','6','7','8','9',
+            '0','1','2','3','4','5','6','7','8','9',
 
-'A','B','C','D','E','F','G','H','I','J',
+            'A','B','C','D','E','F','G','H','I','J',
 
-'K','L','M','N','O','P','Q','R','S','T',
+            'K','L','M','N','O','P','Q','R','S','T',
 
-'U','V','W','X','Y','Z',' ','$','%','*',
+            'U','V','W','X','Y','Z',' ','$','%','*',
 
-'+','-','.','/',':'
+            '+','-','.','/',':'
 
-};
+            };
         private static void Magic(List<string> a, int b, byte c = 8)
         {
             var str = Convert.ToString(b, 2);
             a.Add(str.PadLeft(c, '0'));
         }
-        private static List<string> Magic2(string a)
+        private static List<string> alphaNumericCoding(string a)
         {
             var res = new List<string>();
             var pos = 0;
@@ -149,8 +187,7 @@ namespace ClassLibraryForQrCode
             }
             return res;
         }
-        private static List<string> Magic3(string
-       a)
+        private static List<string> numericCoding(string a)
         {
             var res = new List<string>();
             var pos = 0;
@@ -176,7 +213,7 @@ namespace ClassLibraryForQrCode
             }
             return res;
         }
-        private static List<string> Magic4(string a)
+        private static List<string> binaryCoding(string a)
         {
             var res = new List<string>();
             var numbers =
@@ -192,9 +229,9 @@ namespace ClassLibraryForQrCode
        Dictionary<EncodingMode, string>
        _codeTypeMode = new()
         {
- {EncodingMode.Numeric, "0001"},
- {EncodingMode.AlphaNumeric, "0010"},
- {EncodingMode.Binary, "0100"}
+             {EncodingMode.Numeric, "0001"},
+             {EncodingMode.AlphaNumeric, "0010"},
+             {EncodingMode.Binary, "0100"}
         };
         private static byte Magic(EncodingMode a, QR b)
         {
@@ -220,8 +257,7 @@ namespace ClassLibraryForQrCode
                 (_, _) => 12,
             };
         }
-        private static string Magic(EncodingMode
-       a, QR b, string c)
+        private static string Magic(EncodingMode a, QR b, string c)
         {
             var length = a switch
             {
@@ -235,21 +271,18 @@ namespace ClassLibraryForQrCode
             return str;
         }
         private static StringBuilder Magic(this
-       StringBuilder a, EncodingMode b, QR c, string
-       d)
+       StringBuilder a, EncodingMode b, QR c, string d)
         {
             return a.Append(Magic1(b, c, d));
         }
-        private static string Magic1(EncodingMode
-       a, QR b, string c)
+        private static string Magic1(EncodingMode a, QR b, string c)
         {
             return _codeTypeMode[a] + Magic(a, b,
            c);
         }
         private static readonly string[]
        _magicTextArray = ["11101100", "00010001"];
-        private static StringBuilder Magic(this
-       StringBuilder a)
+        private static StringBuilder Magic(this StringBuilder a)
         {
             var res =
            string.Empty.PadLeft(a.Length % 8, '0');
@@ -263,75 +296,73 @@ namespace ClassLibraryForQrCode
         /// Magic
         /// </summary>
         private static readonly
-       Dictionary<(EccLevel correctionLevel, QR
-       version), int> _maxData = new()
+       Dictionary<(EccLevel correctionLevel, QR version), int> _maxData = new()
         {
- {(EccLevel.H, QR.V1), 72},
-{(EccLevel.Q, QR.V1), 104}, {(EccLevel.M,
-QR.V1), 128}, {(EccLevel.L, QR.V1), 152},
- {(EccLevel.H, QR.V2), 128},
-{(EccLevel.Q, QR.V2), 176}, {(EccLevel.M,
-QR.V2), 224}, {(EccLevel.L, QR.V2), 272},
- {(EccLevel.H, QR.V3), 208},
-{(EccLevel.Q, QR.V3), 272}, {(EccLevel.M,
-QR.V3), 352}, {(EccLevel.L, QR.V3), 440},
- {(EccLevel.H, QR.V4), 288},
-{(EccLevel.Q, QR.V4), 384}, {(EccLevel.M,
-QR.V4), 512}, {(EccLevel.L, QR.V4), 640},
- {(EccLevel.H, QR.V5), 368},
-{(EccLevel.Q, QR.V5), 496}, {(EccLevel.M,
-QR.V5), 688}, {(EccLevel.L, QR.V5), 864},
- {(EccLevel.H, QR.V6), 480},
-{(EccLevel.Q, QR.V6), 608}, {(EccLevel.M,
-QR.V6), 864}, {(EccLevel.L, QR.V6), 1088},
- {(EccLevel.H, QR.V7), 528},
-{(EccLevel.Q, QR.V7), 704}, {(EccLevel.M,
-QR.V7), 992}, {(EccLevel.L, QR.V7), 1248},
- {(EccLevel.H, QR.V8), 688},
-{(EccLevel.Q, QR.V8), 880}, {(EccLevel.M,
-QR.V8), 1232}, {(EccLevel.L, QR.V8), 1552},
- {(EccLevel.H, QR.V9), 800},
-{(EccLevel.Q, QR.V9), 1056}, {(EccLevel.M,
-QR.V9), 1456}, {(EccLevel.L, QR.V9), 1856},
- {(EccLevel.H, QR.V10), 976},
-{(EccLevel.Q, QR.V10), 1232}, {(EccLevel.M,
-QR.V10), 1728}, {(EccLevel.L, QR.V10), 2192},
- {(EccLevel.H, QR.V11), 1120},
-{(EccLevel.Q, QR.V11), 1440}, {(EccLevel.M,
-QR.V11), 2032}, {(EccLevel.L, QR.V11), 2592},
- {(EccLevel.H, QR.V12), 1264},
-{(EccLevel.Q, QR.V12), 1648}, {(EccLevel.M,
-QR.V12), 2320}, {(EccLevel.L, QR.V12), 2960},
- {(EccLevel.H, QR.V13), 1440},
-{(EccLevel.Q, QR.V13), 1952}, {(EccLevel.M,
-QR.V13), 2672}, {(EccLevel.L, QR.V13), 3424},
- {(EccLevel.H, QR.V14), 1576},
-{(EccLevel.Q, QR.V14), 2088}, {(EccLevel.M,
-QR.V14), 2920}, {(EccLevel.L, QR.V14), 3688},
- {(EccLevel.H, QR.V15), 1784},
-{(EccLevel.Q, QR.V15), 2360}, {(EccLevel.M,
-QR.V15), 3320}, {(EccLevel.L, QR.V15), 4184},
- {(EccLevel.H, QR.V16), 2024},
-{(EccLevel.Q, QR.V16), 2600}, {(EccLevel.M,
-QR.V16), 3624}, {(EccLevel.L, QR.V16), 4712},
- {(EccLevel.H, QR.V17), 2264},
-{(EccLevel.Q, QR.V17), 2936}, {(EccLevel.M,
-QR.V17), 4056}, {(EccLevel.L, QR.V17), 5176},
- {(EccLevel.H, QR.V18), 2504},
-{(EccLevel.Q, QR.V18), 3176}, {(EccLevel.M,
-QR.V18), 4504}, {(EccLevel.L, QR.V18), 5768},
- {(EccLevel.H, QR.V19), 2728},
-{(EccLevel.Q, QR.V19), 3560}, {(EccLevel.M,
-QR.V19), 5016}, {(EccLevel.L, QR.V19), 6360},
- {(EccLevel.H, QR.V20), 3080},
-{(EccLevel.Q, QR.V20), 3880}, {(EccLevel.M,
-QR.V20), 5352}, {(EccLevel.L, QR.V20), 6888},
+             {(EccLevel.H, QR.V1), 72},
+            {(EccLevel.Q, QR.V1), 104}, {(EccLevel.M,
+            QR.V1), 128}, {(EccLevel.L, QR.V1), 152},
+             {(EccLevel.H, QR.V2), 128},
+            {(EccLevel.Q, QR.V2), 176}, {(EccLevel.M,
+            QR.V2), 224}, {(EccLevel.L, QR.V2), 272},
+             {(EccLevel.H, QR.V3), 208},
+            {(EccLevel.Q, QR.V3), 272}, {(EccLevel.M,
+            QR.V3), 352}, {(EccLevel.L, QR.V3), 440},
+             {(EccLevel.H, QR.V4), 288},
+            {(EccLevel.Q, QR.V4), 384}, {(EccLevel.M,
+            QR.V4), 512}, {(EccLevel.L, QR.V4), 640},
+             {(EccLevel.H, QR.V5), 368},
+            {(EccLevel.Q, QR.V5), 496}, {(EccLevel.M,
+            QR.V5), 688}, {(EccLevel.L, QR.V5), 864},
+             {(EccLevel.H, QR.V6), 480},
+            {(EccLevel.Q, QR.V6), 608}, {(EccLevel.M,
+            QR.V6), 864}, {(EccLevel.L, QR.V6), 1088},
+             {(EccLevel.H, QR.V7), 528},
+            {(EccLevel.Q, QR.V7), 704}, {(EccLevel.M,
+            QR.V7), 992}, {(EccLevel.L, QR.V7), 1248},
+             {(EccLevel.H, QR.V8), 688},
+            {(EccLevel.Q, QR.V8), 880}, {(EccLevel.M,
+            QR.V8), 1232}, {(EccLevel.L, QR.V8), 1552},
+             {(EccLevel.H, QR.V9), 800},
+            {(EccLevel.Q, QR.V9), 1056}, {(EccLevel.M,
+            QR.V9), 1456}, {(EccLevel.L, QR.V9), 1856},
+             {(EccLevel.H, QR.V10), 976},
+            {(EccLevel.Q, QR.V10), 1232}, {(EccLevel.M,
+            QR.V10), 1728}, {(EccLevel.L, QR.V10), 2192},
+             {(EccLevel.H, QR.V11), 1120},
+            {(EccLevel.Q, QR.V11), 1440}, {(EccLevel.M,
+            QR.V11), 2032}, {(EccLevel.L, QR.V11), 2592},
+             {(EccLevel.H, QR.V12), 1264},
+            {(EccLevel.Q, QR.V12), 1648}, {(EccLevel.M,
+            QR.V12), 2320}, {(EccLevel.L, QR.V12), 2960},
+             {(EccLevel.H, QR.V13), 1440},
+            {(EccLevel.Q, QR.V13), 1952}, {(EccLevel.M,
+            QR.V13), 2672}, {(EccLevel.L, QR.V13), 3424},
+             {(EccLevel.H, QR.V14), 1576},
+            {(EccLevel.Q, QR.V14), 2088}, {(EccLevel.M,
+            QR.V14), 2920}, {(EccLevel.L, QR.V14), 3688},
+             {(EccLevel.H, QR.V15), 1784},
+            {(EccLevel.Q, QR.V15), 2360}, {(EccLevel.M,
+            QR.V15), 3320}, {(EccLevel.L, QR.V15), 4184},
+             {(EccLevel.H, QR.V16), 2024},
+            {(EccLevel.Q, QR.V16), 2600}, {(EccLevel.M,
+            QR.V16), 3624}, {(EccLevel.L, QR.V16), 4712},
+             {(EccLevel.H, QR.V17), 2264},
+            {(EccLevel.Q, QR.V17), 2936}, {(EccLevel.M,
+            QR.V17), 4056}, {(EccLevel.L, QR.V17), 5176},
+             {(EccLevel.H, QR.V18), 2504},
+            {(EccLevel.Q, QR.V18), 3176}, {(EccLevel.M,
+            QR.V18), 4504}, {(EccLevel.L, QR.V18), 5768},
+             {(EccLevel.H, QR.V19), 2728},
+            {(EccLevel.Q, QR.V19), 3560}, {(EccLevel.M,
+            QR.V19), 5016}, {(EccLevel.L, QR.V19), 6360},
+             {(EccLevel.H, QR.V20), 3080},
+            {(EccLevel.Q, QR.V20), 3880}, {(EccLevel.M,
+            QR.V20), 5352}, {(EccLevel.L, QR.V20), 6888},
         };
         /// <summary>
         /// Magic
         /// </summary>
-        private static string Magic(string a, int
-       b)
+        private static string Magic(string a, int b)
         {
             var sb = new StringBuilder(a);
             var cnt = (b - a.Length) / 8;
@@ -349,29 +380,26 @@ QR.V20), 5352}, {(EccLevel.L, QR.V20), 6888},
        Dictionary<EccLevel, byte[]>
        _correctionLevelBlocksCount = new()
         {
- {EccLevel.L,
-[NA,01,01,01,01,01,02,02,02,02,04,04,04,04,04
-,06,06,06,06,07,08]},
- {EccLevel.M,
-[NA,01,01,01,02,02,04,04,04,05,05,05,08,09,09
-,10,10,11,13,14,16]},
- {EccLevel.Q,
-[NA,01,01,02,02,04,04,06,06,08,08,08,10,12,16
-,12,17,16,18,21,20]},
- {EccLevel.H,
-[NA,01,01,02,04,04,04,05,06,08,08,11,11,16,16
-,18,16,19,21,25,25]},
+             {EccLevel.L,
+            [NA,01,01,01,01,01,02,02,02,02,04,04,04,04,04
+            ,06,06,06,06,07,08]},
+             {EccLevel.M,
+            [NA,01,01,01,02,02,04,04,04,05,05,05,08,09,09
+            ,10,10,11,13,14,16]},
+             {EccLevel.Q,
+            [NA,01,01,02,02,04,04,06,06,08,08,08,10,12,16
+            ,12,17,16,18,21,20]},
+             {EccLevel.H,
+            [NA,01,01,02,04,04,04,05,06,08,08,11,11,16,16
+            ,18,16,19,21,25,25]},
         };
         /// <summary>
         /// Magic
         /// </summary>
-        public static List<byte[]> Magic(string
-       a, int b, int c)
+        public static List<byte[]> Magic(string a, int b, int c)
         {
             List<byte> tmp = [];
-            var str = Enumerable.Range(0,
-           a.Length / 8).Select(i => a.Substring(i * 8,
-           8));
+            var str = Enumerable.Range(0, a.Length / 8).Select(i => a.Substring(i * 8, 8));
             foreach (var line in str)
             {
                 tmp.Add(Convert.ToByte(line, 2));
@@ -404,18 +432,18 @@ QR.V20), 5352}, {(EccLevel.L, QR.V20), 6888},
        Dictionary<EccLevel, byte[]>
        _countOfErrorCorrectionCodeWords = new()
         {
- {EccLevel.L,
-[NA,07,10,15,20,26,18,20,24,30,18,20,24,26,30
-,22,24,28,30,28,28]},
- {EccLevel.M,
-[NA,10,16,26,18,24,16,18,22,22,26,30,22,22,24
-,24,28,28,26,26,26]},
- {EccLevel.Q,
-[NA,13,22,18,26,18,24,18,22,20,24,28,26,24,20
-,30,24,28,28,26,30]},
- {EccLevel.H,
-[NA,17,28,22,16,22,28,26,26,24,28,24,28,22,24
-,24,30,28,28,26,28]},
+             {EccLevel.L,
+            [NA,07,10,15,20,26,18,20,24,30,18,20,24,26,30
+            ,22,24,28,30,28,28]},
+             {EccLevel.M,
+            [NA,10,16,26,18,24,16,18,22,22,26,30,22,22,24
+            ,24,28,28,26,26,26]},
+             {EccLevel.Q,
+            [NA,13,22,18,26,18,24,18,22,20,24,28,26,24,20
+            ,30,24,28,28,26,30]},
+             {EccLevel.H,
+            [NA,17,28,22,16,22,28,26,26,24,28,24,28,22,24
+            ,24,30,28,28,26,28]},
         };
         /// <summary>
         /// Magic
@@ -463,162 +491,162 @@ QR.V20), 5352}, {(EccLevel.L, QR.V20), 6888},
        byte[]> _correctionLevelGeneratingPolynomial
        = new()
         {
- // x^7 + α^87x^6 + α^229x^5 + \α^146x^4 + 
- // α^149x^3 + α^238x^2 + α^102x^ + \α^21
- {7, [87, 229, 146, 149, 238, 102,
-21]}, 
- // x^10 + α^251x^9 + α^67x^8 + \α^46x^7 + α^61x^6 + 
- // α^118x^5 + α^70x^4 + α^64x^3 + α^94x^2 + α^32x^ + α^45
- {10, [251, 67, 46, 61, 118, 70, 64,
-94, 32, 45]}, 
- // x^13 + α^74x^12 + α^152x^11 + α^176x^10 + α^100x^9 + α^86x^8 + 
- // α^100x^7 + α^106x^6 + α^104x^5 + α^130x^4 + α^218x^3 + α^206x^2 + α^140x^ + α^78
- {13, [74, 152, 176, 100, 86, 100,
-106, 104, 130, 218, 206, 140, 78]},
- {15, [8, 183, 61, 91, 202, 37, 51,
-58, 58, 237, 140, 124, 5, 99, 105]}, 
- // x^16 + α^120x^15 + α^104x^14 + α^107x^13 + α^109x^12 + α^102x^11 + α^161x^10 + α^76x^9 +
- // α^3x^8 + α^91x^7 + α^191x^6 +α^147x^5 + α^169x^4 + α^182x^3 + α^194x^2 + α^225x^ + α^120
- {16, [120, 104, 107, 109, 102, 161,
-76, 3, 91, 191, 147, 169, 182, 194, 225,
-120]}, 
- // x^17 + α^43x^16 + α^139x^15 + α^206x^14 + α^78x^13 + α^43x^12 + α^239x^11 + α^123x^10 + α^206x^9 + α^214x^8 + α^147x^7 + α^24x^6 + 
- // α^99x^5 + α^150x^4 + α^39x^3 + α^243x^2 + α^163x^ + α^136
- {17, [43, 139, 206, 78, 43, 239, 123,
-206, 214, 147, 24, 99, 150, 39, 243, 163,
-136]},
- // x^18 + α^215x^17 + α^234x^16 + α^158x^15 + α^94x^14 + α^184x^13 + α^97x^12 + α^118x^11 + α^170x^10 + α^79x^9 + α^187x^8 + α^152x^7 + 
- // α^148x^6 + α^252x^5 + α^179x^4 + α^5x^3 + α^98x^2 + α^96x^ + α^153
- {18, [215, 234, 158, 94, 184, 97,
-118, 170, 79, 187, 152, 148, 252, 179, 5, 98,
-96, 153]},
- {20, [17, 60, 79, 50, 61, 163, 26,
-187, 202, 180, 221, 225, 83, 239, 156, 164,
-212, 212, 188, 190]},
- // x^22 + α^210x^21 + α^171x^20 + α^247x^19 + α^242x^18 + α^93x^17 + α^230x^16 + α^14x^15 + α^109x^14 + α^221x^13 + α^53x^12 +
- // α^200x^11 + α^74x^10 + α^8x^9 + α^172x^8 + α^98x^7 + α^80x^6 + α^219x^5 + α^134x^4 + α^160x^3 + α^105x^2 + α^165x^ + α^231
- {22, [210, 171, 247, 242, 93, 230,
-14, 109, 221, 53, 200, 74, 8, 172, 98, 80,
-219, 134, 160, 105, 165, 231]},
- {24, [229, 121, 135, 48, 211, 117,
-251, 126, 159, 180, 169, 152, 192, 226, 228,
-218, 111, 0, 117, 232, 87, 96, 227, 21]},
- {26, [173, 125, 158, 2, 103, 182,
-118, 17, 145, 201, 111, 28, 165, 53, 161, 21,
-245, 142, 13, 102, 48, 227, 153, 145, 218,
-70]},
- // x^28 + α^168x^27 + α^223x^26 + α^200x^25 + α^104x^24 + α^224x^23 + α^234x^22 + α^108x^21 + α^180x^20 + α^110x^19 + α^190x^18 + α^195x^17 + 
- // α^147x^16 + α^205x^15 + α^27x^14 + α^232x^13 + α^201x^12 + α^21x^11 + α^43x^10 + α^245x^9 + α^87x^8 + α^42x^7 + α^195x^6 + α^212x^5 + α^119x^4 +
- // α^242x^3 + α^37x^2 + α^9x^ + α^123
- {28, [168, 223, 200, 104, 224, 234,
-108, 180, 110, 190, 195, 147, 205, 27, 232,
-201, 21, 43, 245, 87, 42, 195, 212, 119, 242,
-37, 9, 123]},
- {30, [41, 173, 145, 152, 216, 31,
-179, 182, 50, 48, 110, 86, 239, 96, 222, 125,
-42, 173, 226, 193, 224, 130, 156, 37, 251,
-216, 238, 40, 192, 180]},
+             // x^7 + α^87x^6 + α^229x^5 + \α^146x^4 + 
+             // α^149x^3 + α^238x^2 + α^102x^ + \α^21
+             {7, [87, 229, 146, 149, 238, 102,
+            21]}, 
+             // x^10 + α^251x^9 + α^67x^8 + \α^46x^7 + α^61x^6 + 
+             // α^118x^5 + α^70x^4 + α^64x^3 + α^94x^2 + α^32x^ + α^45
+             {10, [251, 67, 46, 61, 118, 70, 64,
+            94, 32, 45]}, 
+             // x^13 + α^74x^12 + α^152x^11 + α^176x^10 + α^100x^9 + α^86x^8 + 
+             // α^100x^7 + α^106x^6 + α^104x^5 + α^130x^4 + α^218x^3 + α^206x^2 + α^140x^ + α^78
+             {13, [74, 152, 176, 100, 86, 100,
+            106, 104, 130, 218, 206, 140, 78]},
+             {15, [8, 183, 61, 91, 202, 37, 51,
+            58, 58, 237, 140, 124, 5, 99, 105]}, 
+             // x^16 + α^120x^15 + α^104x^14 + α^107x^13 + α^109x^12 + α^102x^11 + α^161x^10 + α^76x^9 +
+             // α^3x^8 + α^91x^7 + α^191x^6 +α^147x^5 + α^169x^4 + α^182x^3 + α^194x^2 + α^225x^ + α^120
+             {16, [120, 104, 107, 109, 102, 161,
+            76, 3, 91, 191, 147, 169, 182, 194, 225,
+            120]}, 
+             // x^17 + α^43x^16 + α^139x^15 + α^206x^14 + α^78x^13 + α^43x^12 + α^239x^11 + α^123x^10 + α^206x^9 + α^214x^8 + α^147x^7 + α^24x^6 + 
+             // α^99x^5 + α^150x^4 + α^39x^3 + α^243x^2 + α^163x^ + α^136
+             {17, [43, 139, 206, 78, 43, 239, 123,
+            206, 214, 147, 24, 99, 150, 39, 243, 163,
+            136]},
+             // x^18 + α^215x^17 + α^234x^16 + α^158x^15 + α^94x^14 + α^184x^13 + α^97x^12 + α^118x^11 + α^170x^10 + α^79x^9 + α^187x^8 + α^152x^7 + 
+             // α^148x^6 + α^252x^5 + α^179x^4 + α^5x^3 + α^98x^2 + α^96x^ + α^153
+             {18, [215, 234, 158, 94, 184, 97,
+            118, 170, 79, 187, 152, 148, 252, 179, 5, 98,
+            96, 153]},
+             {20, [17, 60, 79, 50, 61, 163, 26,
+            187, 202, 180, 221, 225, 83, 239, 156, 164,
+            212, 212, 188, 190]},
+             // x^22 + α^210x^21 + α^171x^20 + α^247x^19 + α^242x^18 + α^93x^17 + α^230x^16 + α^14x^15 + α^109x^14 + α^221x^13 + α^53x^12 +
+             // α^200x^11 + α^74x^10 + α^8x^9 + α^172x^8 + α^98x^7 + α^80x^6 + α^219x^5 + α^134x^4 + α^160x^3 + α^105x^2 + α^165x^ + α^231
+             {22, [210, 171, 247, 242, 93, 230,
+            14, 109, 221, 53, 200, 74, 8, 172, 98, 80,
+            219, 134, 160, 105, 165, 231]},
+             {24, [229, 121, 135, 48, 211, 117,
+            251, 126, 159, 180, 169, 152, 192, 226, 228,
+            218, 111, 0, 117, 232, 87, 96, 227, 21]},
+             {26, [173, 125, 158, 2, 103, 182,
+            118, 17, 145, 201, 111, 28, 165, 53, 161, 21,
+            245, 142, 13, 102, 48, 227, 153, 145, 218,
+            70]},
+             // x^28 + α^168x^27 + α^223x^26 + α^200x^25 + α^104x^24 + α^224x^23 + α^234x^22 + α^108x^21 + α^180x^20 + α^110x^19 + α^190x^18 + α^195x^17 + 
+             // α^147x^16 + α^205x^15 + α^27x^14 + α^232x^13 + α^201x^12 + α^21x^11 + α^43x^10 + α^245x^9 + α^87x^8 + α^42x^7 + α^195x^6 + α^212x^5 + α^119x^4 +
+             // α^242x^3 + α^37x^2 + α^9x^ + α^123
+             {28, [168, 223, 200, 104, 224, 234,
+            108, 180, 110, 190, 195, 147, 205, 27, 232,
+            201, 21, 43, 245, 87, 42, 195, 212, 119, 242,
+            37, 9, 123]},
+             {30, [41, 173, 145, 152, 216, 31,
+            179, 182, 50, 48, 110, 86, 239, 96, 222, 125,
+            42, 173, 226, 193, 224, 130, 156, 37, 251,
+            216, 238, 40, 192, 180]},
         };
         private static readonly byte[]
        _galoisField = [1, 2, 4, 8, 16, 32, 64, 128,
-29, 58, 116, 232, 205, 135, 19, 38,
+            29, 58, 116, 232, 205, 135, 19, 38,
 
-76, 152, 45, 90, 180, 117, 234, 201, 143, 3,
-6, 12, 24, 48, 96, 192,
+            76, 152, 45, 90, 180, 117, 234, 201, 143, 3,
+            6, 12, 24, 48, 96, 192,
 
-157, 39, 78, 156, 37, 74, 148, 53, 106, 212,
-181, 119, 238, 193, 159, 35,
+            157, 39, 78, 156, 37, 74, 148, 53, 106, 212,
+            181, 119, 238, 193, 159, 35,
 
-70, 140, 5, 10, 20, 40, 80, 160, 93, 186,
-105, 210, 185, 111, 222, 161,
+            70, 140, 5, 10, 20, 40, 80, 160, 93, 186,
+            105, 210, 185, 111, 222, 161,
 
-95, 190, 97, 194, 153, 47, 94, 188, 101, 202,
-137, 15, 30, 60, 120, 240,
+            95, 190, 97, 194, 153, 47, 94, 188, 101, 202,
+            137, 15, 30, 60, 120, 240,
 
-253, 231, 211, 187, 107, 214, 177, 127, 254,
-225, 223, 163, 91, 182, 113, 226,
+            253, 231, 211, 187, 107, 214, 177, 127, 254,
+            225, 223, 163, 91, 182, 113, 226,
 
-217, 175, 67, 134, 17, 34, 68, 136, 13, 26,
-52, 104, 208, 189, 103, 206,
+            217, 175, 67, 134, 17, 34, 68, 136, 13, 26,
+            52, 104, 208, 189, 103, 206,
 
-129, 31, 62, 124, 248, 237, 199, 147, 59,
-118, 236, 197, 151, 51, 102, 204,
+            129, 31, 62, 124, 248, 237, 199, 147, 59,
+            118, 236, 197, 151, 51, 102, 204,
 
-133, 23, 46, 92, 184, 109, 218, 169, 79, 158,
-33, 66, 132, 21, 42, 84,
+            133, 23, 46, 92, 184, 109, 218, 169, 79, 158,
+            33, 66, 132, 21, 42, 84,
 
-168, 77, 154, 41, 82, 164, 85, 170, 73, 146,
-57, 114, 228, 213, 183, 115,
+            168, 77, 154, 41, 82, 164, 85, 170, 73, 146,
+            57, 114, 228, 213, 183, 115,
 
-230, 209, 191, 99, 198, 145, 63, 126, 252,
-229, 215, 179, 123, 246, 241, 255,
+            230, 209, 191, 99, 198, 145, 63, 126, 252,
+            229, 215, 179, 123, 246, 241, 255,
 
 
 
-227, 219, 171, 75, 150, 49, 98, 196, 149, 55,
-110, 220, 165, 87, 174, 65,
+            227, 219, 171, 75, 150, 49, 98, 196, 149, 55,
+            110, 220, 165, 87, 174, 65,
 
-130, 25, 50, 100, 200, 141, 7, 14, 28, 56,
-112, 224, 221, 167, 83, 166,
+            130, 25, 50, 100, 200, 141, 7, 14, 28, 56,
+            112, 224, 221, 167, 83, 166,
 
-81, 162, 89, 178, 121, 242, 249, 239, 195,
-155, 43, 86, 172, 69, 138, 9,
+            81, 162, 89, 178, 121, 242, 249, 239, 195,
+            155, 43, 86, 172, 69, 138, 9,
 
-18, 36, 72, 144, 61, 122, 244, 245, 247, 243,
-251, 235, 203, 139, 11, 22,
+            18, 36, 72, 144, 61, 122, 244, 245, 247, 243,
+            251, 235, 203, 139, 11, 22,
 
-44, 88, 176, 125, 250, 233, 207, 131, 27, 54,
-108, 216, 173, 71, 142, 1
+            44, 88, 176, 125, 250, 233, 207, 131, 27, 54,
+            108, 216, 173, 71, 142, 1
 
        ];
         private static readonly byte[]
        _backGaloisField = [NA, 0, 1, 25, 2, 50, 26,
-198, 3, 223, 51, 238, 27, 104, 199, 75,
+            198, 3, 223, 51, 238, 27, 104, 199, 75,
 
-4, 100, 224, 14, 52, 141, 239, 129, 28, 193,
-105, 248, 200, 8, 76, 113,
+            4, 100, 224, 14, 52, 141, 239, 129, 28, 193,
+            105, 248, 200, 8, 76, 113,
 
-5, 138, 101, 47, 225, 36, 15, 33, 53, 147,
-142, 218, 240, 18, 130, 69,
+            5, 138, 101, 47, 225, 36, 15, 33, 53, 147,
+            142, 218, 240, 18, 130, 69,
 
-29, 181, 194, 125, 106, 39, 249, 185, 201,
-154, 9, 120, 77, 228, 114, 166,
+            29, 181, 194, 125, 106, 39, 249, 185, 201,
+            154, 9, 120, 77, 228, 114, 166,
 
-6, 191, 139, 98, 102, 221, 48, 253, 226, 152,
-37, 179, 16, 145, 34, 136,
+            6, 191, 139, 98, 102, 221, 48, 253, 226, 152,
+            37, 179, 16, 145, 34, 136,
 
-54, 208, 148, 206, 143, 150, 219, 189, 241,
-210, 19, 92, 131, 56, 70, 64,
+            54, 208, 148, 206, 143, 150, 219, 189, 241,
+            210, 19, 92, 131, 56, 70, 64,
 
-30, 66, 182, 163, 195, 72, 126, 110, 107, 58,
-40, 84, 250, 133, 186, 61,
+            30, 66, 182, 163, 195, 72, 126, 110, 107, 58,
+            40, 84, 250, 133, 186, 61,
 
-202, 94, 155, 159, 10, 21, 121, 43, 78, 212,
-229, 172, 115, 243, 167, 87,
+            202, 94, 155, 159, 10, 21, 121, 43, 78, 212,
+            229, 172, 115, 243, 167, 87,
 
-7, 112, 192, 247, 140, 128, 99, 13, 103, 74,
-222, 237, 49, 197, 254, 24,
+            7, 112, 192, 247, 140, 128, 99, 13, 103, 74,
+            222, 237, 49, 197, 254, 24,
 
-227, 165, 153, 119, 38, 184, 180, 124, 17,
-68, 146, 217, 35, 32, 137, 46,
+            227, 165, 153, 119, 38, 184, 180, 124, 17,
+            68, 146, 217, 35, 32, 137, 46,
 
-55, 63, 209, 91, 149, 188, 207, 205, 144,
-135, 151, 178, 220, 252, 190, 97,
+            55, 63, 209, 91, 149, 188, 207, 205, 144,
+            135, 151, 178, 220, 252, 190, 97,
 
-242, 86, 211, 171, 20, 42, 93, 158, 132, 60,
-57, 83, 71, 109, 65, 162,
+            242, 86, 211, 171, 20, 42, 93, 158, 132, 60,
+            57, 83, 71, 109, 65, 162,
 
-31, 45, 67, 216, 183, 123, 164, 118, 196, 23,
-73, 236, 127, 12, 111, 246,
+            31, 45, 67, 216, 183, 123, 164, 118, 196, 23,
+            73, 236, 127, 12, 111, 246,
 
-108, 161, 59, 82, 41, 157, 85, 170, 251, 96,
-134, 177, 187, 204, 62, 90,
+            108, 161, 59, 82, 41, 157, 85, 170, 251, 96,
+            134, 177, 187, 204, 62, 90,
 
-203, 89, 95, 176, 156, 169, 160, 81, 11, 245,
-22, 235, 122, 117, 44, 215,
+            203, 89, 95, 176, 156, 169, 160, 81, 11, 245,
+            22, 235, 122, 117, 44, 215,
 
-79, 174, 213, 233, 230, 231, 173, 232, 116,
-214, 244, 234, 168, 80, 88, 175
+            79, 174, 213, 233, 230, 231, 173, 232, 116,
+            214, 244, 234, 168, 80, 88, 175
 
        ];
         private static void Magic(List<byte[]> a,
@@ -779,31 +807,26 @@ new()
         private static readonly Pair[]
        _masksAndCorrectionLevelTopLeftTemplate = [
 
-       (02, 10), (03, 10), (04, 10),
+            (02, 10), (03, 10), (04, 10),
 
-(05, 10), (06, 10), (07, 10),
+            (05, 10), (06, 10), (07, 10),
 
-(09, 10), (10, 10), (10, 09),
+            (09, 10), (10, 10), (10, 09),
 
-(10, 07), (10, 06), (10, 05),
+            (10, 07), (10, 06), (10, 05),
 
-(10, 04), (10, 03), (10, 02),
+            (10, 04), (10, 03), (10, 02),
 
        ];
         private static Pair[] Magic(this QR a,
        int b)
         {
             var offset = 11 + (int)a * 4;
-            return [(b, offset + 7), (b, offset
-+6 ), (b, offset + 5),
- (b, offset + 4), (b, offset +
-3), (b, offset + 2),
- (b, offset + 1), (b, offset),
-(offset + 1, b),
- (offset + 2, b), (offset + 3,
-b), (offset + 4, b),
- (offset + 5, b), (offset + 6,
-b), (offset + 7, b)];
+            return [(b, offset + 7), (b, offset + 6 ), (b, offset + 5),
+                 (b, offset + 4), (b, offset + 3), (b, offset + 2),
+                 (b, offset + 1), (b, offset), (offset + 1, b),
+                 (offset + 2, b), (offset + 3, b), (offset + 4, b),
+                 (offset + 5, b), (offset + 6, b), (offset + 7, b)];
         }
         private static void Magic(Pair[] a,
        List<byte[]> b, int c, char d)
@@ -824,8 +847,7 @@ b), (offset + 7, b)];
             }
             return a;
         }
-        private static List<byte[]> Magic0(this
-       List<byte[]> a, int b, int c)
+        private static List<byte[]> Magic0(this List<byte[]> a, int b, int c)
         {
             Magic(a, b - 4, c - 4, 9, 1);
             Magic(a, b - 3, c - 3, 7, 0);
@@ -847,8 +869,7 @@ b), (offset + 7, b)];
             return a;
         }
 
- private static List<byte[]> Magic(this
-List<byte[]> a, byte b)
+ private static List<byte[]> Magic(this List<byte[]> a, byte b)
         {
             for (int i = 0; i < a.Count; i++)
             {
@@ -1201,92 +1222,90 @@ Magic1(this (int a, List<byte[]> b) a)
    a.a, a.b);
 }
         #endregion
-#region Magic
-/// <summary>
-/// Magic
-/// </summary>
-private static string Magic(this
-List<byte[]> a, bool b)
-{
-    var sb = new StringBuilder();
-    var length = a.Count % 2 == 1 ?
-   a.Count + 1 : a.Count;
-    for (int row = 0; row < length; row
-   += 2)
-    {
-        for (int column = 0; column <
-       a[0].Length; column++)
+        #region Magic
+        /// <summary>
+        /// Magic
+        /// </summary>
+        private static string Magic(this
+        List<byte[]> a, bool b)
         {
-            byte scanModule1 =
-           a[row][column];
-            byte scanModule2 = row <
-           a.Count - 1 ? a[row + 1][column] : ACTIVE;
-            var c = b
-            ? Magic((scanModule1,
-           scanModule2))
-            : Magic([scanModule1,
-scanModule2]);
-            sb.Append(c);
+            var sb = new StringBuilder();
+            var length = a.Count % 2 == 1 ?
+           a.Count + 1 : a.Count;
+            for (int row = 0; row < length; row
+           += 2)
+            {
+                for (int column = 0; column <
+               a[0].Length; column++)
+                {
+                    byte scanModule1 =
+                   a[row][column];
+                    byte scanModule2 = row <
+                   a.Count - 1 ? a[row + 1][column] : ACTIVE;
+                    var c = b
+                    ? Magic((scanModule1, scanModule2))
+                    : Magic([scanModule1, scanModule2]);
+                    sb.Append(c);
+                }
+                sb.AppendLine();
+            }
+            return sb.ToString();
         }
-        sb.AppendLine();
+        /// <summary>
+        /// Граница в два модуля вокруг QR-кода
+        /// </summary>
+        private const int BORDER = 2;
+        /// <summary>
+        /// Размер рамки для позиционирования QR кода при сканировании
+         /// </summary>
+         private const int POSITION_DETECTION = 8;
+        /// <summary>
+        /// Активный модуль
+        /// </summary>
+        private const byte ACTIVE = 1;
+        /// <summary>
+        /// Неактивный модуль
+        /// </summary>
+        private const byte ZERO = 0;
+        /// <summary>
+        /// Недопустимый параметр
+        /// </summary>
+        private const byte NA = 0;
+        private static char Magic(byte[] a)
+        => (a[0], a[1]) switch
+        {
+            (0, 0) => ' ',
+            (0, 1) => '▄',
+            (1, 0) => '▀',
+            (1, 1) => '█',
+            _ => throw new
+            NotImplementedException(),
+        };
+        private static char Magic((byte a, byte
+        b) c)
+        => (c.a, c.b) switch
+        {
+            (1, 1) => ' ',
+            (1, 0) => '▄',
+            (0, 1) => '▀',
+            (0, 0) => '█',
+            _ => throw new
+            NotImplementedException(),
+        };
+         private static List<byte[]> Magic(int a,
+        byte b = ACTIVE)
+        {
+            List<byte[]> qrCodeMatrix = [];
+            for (int i = 0; i < a; i++)
+            {
+                qrCodeMatrix.Add(new byte[a]);
+            }
+            return qrCodeMatrix.Magic(b);
+        }
+        private static int Magic(byte a, int b)
+        {
+            return 17 + 4 * a + b * 2;
+        }
+         #endregion
     }
-    return sb.ToString();
-}
-/// <summary>
-/// Граница в два модуля вокруг QR-кода
-/// </summary>
-private const int BORDER = 2;
-/// <summary>
-/// Размер рамки для позиционирования QR кода при сканировании
- /// </summary>
- private const int POSITION_DETECTION = 8;
-/// <summary>
-/// Активный модуль
-/// </summary>
-private const byte ACTIVE = 1;
-/// <summary>
-/// Неактивный модуль
-/// </summary>
-private const byte ZERO = 0;
-/// <summary>
-/// Недопустимый параметр
-/// </summary>
-private const byte NA = 0;
-private static char Magic(byte[] a)
-=> (a[0], a[1]) switch
-{
-    (0, 0) => ' ',
-    (0, 1) => '▄',
-    (1, 0) => '▀',
-    (1, 1) => '█',
-    _ => throw new
-    NotImplementedException(),
-};
-private static char Magic((byte a, byte
-b) c)
-=> (c.a, c.b) switch
-{
-    (1, 1) => ' ',
-    (1, 0) => '▄',
-    (0, 1) => '▀',
-    (0, 0) => '█',
-    _ => throw new
-    NotImplementedException(),
-};
- private static List<byte[]> Magic(int a,
-byte b = ACTIVE)
-{
-    List<byte[]> qrCodeMatrix = [];
-    for (int i = 0; i < a; i++)
-    {
-        qrCodeMatrix.Add(new byte[a]);
-    }
-    return qrCodeMatrix.Magic(b);
-}
-private static int Magic(byte a, int b)
-{
-    return 17 + 4 * a + b * 2;
-}
- #endregion
-}
 }
