@@ -31,7 +31,7 @@ namespace ClassLibraryForQrCode
             stringOfCode = QrCodeMagicBuilder.ToQrCode(
                 textForCoding,
                 ref qrCodeVersion,
-                ref encoding,
+                ref encodingMode,
                 ref errCorelation,
                 ref mask);
         }
