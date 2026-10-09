@@ -1,13 +1,14 @@
 ﻿using System;
 using System.Reflection.Emit;
+using System.Threading.Tasks;
 
 namespace ClassLibraryForQrCode
 {
     public class QRcode: IQrCode
     {
-        public static QrCodeType modeQrCode;
+        public static QrCodeType modeQrCode { get; set; }
         private string textForCoding;
-        private QR qrCodeVersion;     
+        private QR qrCodeVersion = QR.V1;     
         private EccLevel? errCorelation; 
         private Mask? mask;             
         private string stringOfCode;
@@ -27,13 +28,12 @@ namespace ClassLibraryForQrCode
         public void setNewText(string newText)
         {
             textForCoding = newText;
-            EncodingMode encodingMode = default;
-            stringOfCode = QrCodeMagicBuilder.ToQrCode(
-                textForCoding,
-                ref qrCodeVersion,
-                ref encodingMode,
-                ref errCorelation,
-                ref mask);
+            EncodingMode encodingMode = EncodingMode.Numeric;
+            qrCodeVersion = QR.V1;
+            errCorelation = default;
+            mask = default;
+
+            stringOfCode = textForCoding.ToQrCode(ref qrCodeVersion, ref encodingMode,ref errCorelation,ref mask);
         }
         
         public override string ToString()

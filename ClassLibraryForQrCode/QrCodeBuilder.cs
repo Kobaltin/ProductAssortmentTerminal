@@ -58,10 +58,13 @@ namespace ClassLibraryForQrCode
             // 1.2 Определяем подходящий под настройки: уровень коррекции ошибок и версию кода
             // а так же сам текст для кодирования со служебной информацией
             (string a, EccLevel b, QR c) codeEccLevelQR = findEccLevelQRText(text, encodedString, codeType, qrCodeVersion, needCorrectionLevel);
+            qrCodeVersion = codeEccLevelQR.c;
+            needCorrectionLevel = codeEccLevelQR.b;
+
             // ------------------------------------------------------------------------------------------------------------------------------------------
             // Этап 2. Блоки с данными + байты коррекции
             // А тут аж все 4
-            
+
             // 2.1 Определяем длину из словаря
             int lenght = _maxData[(codeEccLevelQR.b, codeEccLevelQR.c)];
             // 2.2 На основе текста для кодирования из 1.2 и длины -определяем полный текст для кодирования
@@ -80,24 +83,34 @@ namespace ClassLibraryForQrCode
             // 2.6.2 Добавляем в список 2.5 блок коррекции
             corectionBloks.Add(addCoretionBlok(listOfBlocks[i], (byte)size));
             }
-
-            
             //
             // 2.7 На основе списка блоков 2.4 и блоков коррекции 2.5 получаем строку с данными
+            string dataString = makeDataString(listOfBlocks, corectionBloks);
             // ------------------------------------------------------------------------------------------------------------------------------------------
             // Этап 3. Создание матрицы QR кода c лучшей маской
             // Тут всего 1 функция, но нужно добавить выбор, какую именно вызывать
             //
             // 3.1 Инициализируем блок данных, с версией, уровнем коррекции и данными 2.7
-            // 3.2 В зависимости от наличии определенной маски формируем матрицу кода, которая будет представлена в виде списка блоков
-            // 3.2.1 Если макса задана, передаем ее номер
-            // 3.2.2 Если маска не задана, передаем ссылку на этот входной параметр, и функция помимо формирования матрицы определит оптимальный номер
+            var qrData = new QrCodeData { Version = codeEccLevelQR.c, CorrectionLevel = codeEccLevelQR.b, Data = dataString };
+            // 3.2 В зависимости от наличия определенной маски формируем матрицу кода, которая будет представлена в виде списка блоков
+            List<byte[]> matrix;
+            
+            if (maskNum.HasValue)
+            {// 3.2.1 Если макса задана, передаем ее номер
+                matrix = qrData.makeMatrixCode(maskNum.Value);
+
+            }
+            else
+            {// 3.2.2 Если маска не задана, передаем ссылку на этот входной параметр, и функция помимо формирования матрицы определит оптимальный номер
+                matrix = qrData.makeMatrixCode(ref maskNum);
+
+            }
             // ------------------------------------------------------------------------------------------------------------------------------------------
             // Этап 4.
             // Достаточно вызова одной функции, чтобы вернуть строку
             //
             // 4.1 На основе данных по матрице и флага инвертирования, формируем готовую строку кода
-                return text;
+            return matrix.makeFinalString(invert);
         }
         #endregion
         #region Magic
@@ -125,24 +138,19 @@ namespace ClassLibraryForQrCode
         private static (string a, EccLevel b, QR c) findEccLevelQRText(string a, string b, EncodingMode c, QR d, EccLevel? e = null)
         {
             if (d == NA)
-                throw new
-               NotSupportedException("QR-code version start with 1!");
-               
+                throw new NotSupportedException("QR-code version start with 1!");
                 var sb = new StringBuilder();
             sb.Magic(c, d, a)
             .Append(b)
             .Magic();
             var length = sb.Length;
             if ((int)d > 20)
-                throw new
-               NotSupportedException($"Current QR-code does not support version { d } yet!");
+                throw new NotSupportedException($"Current QR-code does not support version { d } yet!");
         if (e.HasValue)
             {
                 foreach (var found in _maxData
-                .Where(v => v.Key.version >=
-               d && v.Key.correctionLevel >= e.Value)
-                .Where(l => length <
-               l.Value))
+                .Where(v => v.Key.version >= d && v.Key.correctionLevel >= e.Value)
+                .Where(l => length < l.Value))
                     return (sb.ToString(),
                    found.Key.correctionLevel,
                    found.Key.version);
@@ -155,8 +163,7 @@ namespace ClassLibraryForQrCode
                found.Key.correctionLevel,
                found.Key.version);
             if ((int)d > 20)
-                throw new
-               NotSupportedException($"Current QR-code does not support data length { length } yet!");
+                throw new NotSupportedException($"Current QR-code does not support data length { length } yet!");
         return findEccLevelQRText(a, b, c, d + 1, e);
         }
         private static readonly char[]
@@ -173,7 +180,7 @@ namespace ClassLibraryForQrCode
             '+','-','.','/',':'
 
             };
-        private static void Magic(List<string> a, int b, byte c = 8)
+        private static void fileWithZero(List<string> a, int b, byte c = 8)
         {
             var str = Convert.ToString(b, 2);
             a.Add(str.PadLeft(c, '0'));
@@ -188,13 +195,12 @@ namespace ClassLibraryForQrCode
                Array.IndexOf(letterNumberArray, a[pos]);
                 var index2 =
                Array.IndexOf(letterNumberArray, a[pos + 1]);
-                Magic(res, index1 * 45 + index2, 11);
+                fileWithZero(res, index1 * 45 + index2, 11);
                 pos += 2;
             }
             if (a.Length % 2 == 1)
         {
-                Magic(res,
-               Array.IndexOf(letterNumberArray, a[^1]), 6);
+                fileWithZero(res,Array.IndexOf(letterNumberArray, a[^1]), 6);
             }
             return res;
         }
@@ -206,21 +212,16 @@ namespace ClassLibraryForQrCode
             while (pos < a.Length - 3)
             {
                 var number = a.Substring(pos, 3);
-                Magic(res,
-               Convert.ToInt32(number));
+                fileWithZero(res,Convert.ToInt32(number));
                 pos += 3;
             }
             if (a.Length % 3 == 2)
             {
-                Magic(res,
-               Convert.ToInt32(a.Substring(length - 3, 2)),
-               7);
+                fileWithZero(res,Convert.ToInt32(a.Substring(length - 3, 2)),7);
             }
             else if (a.Length % 3 == 1)
             {
-                Magic(res,
-               Convert.ToInt32(a.Substring(length - 2, 1)),
-               4);
+                fileWithZero(res,Convert.ToInt32(a.Substring(length - 2, 1)),4);
             }
             return res;
         }
@@ -231,8 +232,7 @@ namespace ClassLibraryForQrCode
            Encoding.UTF8.GetBytes(a);
             foreach (var number in numbers)
             {
-                Magic(res,
-               Convert.ToInt32(number));
+                fileWithZero(res,Convert.ToInt32(number));
             }
             return res;
         }
@@ -277,8 +277,7 @@ namespace ClassLibraryForQrCode
                 _ => c.Length,
             };
             var size = Magic(a, b);
-            var str = Convert.ToString(length,
-           2).PadLeft(size, '0');
+            var str = Convert.ToString(length,2).PadLeft(size, '0');
             return str;
         }
         private static StringBuilder Magic(this StringBuilder a, EncodingMode b, QR c, string d)
@@ -287,8 +286,7 @@ namespace ClassLibraryForQrCode
         }
         private static string Magic1(EncodingMode a, QR b, string c)
         {
-            return _codeTypeMode[a] + Magic(a, b,
-           c);
+            return _codeTypeMode[a] + Magic(a, b, c);
         }
         private static readonly string[]
        _magicTextArray = ["11101100", "00010001"];
@@ -338,8 +336,7 @@ namespace ClassLibraryForQrCode
             var cnt = (b - a.Length) / 8;
             for (int i = 0; i < cnt; i++)
             {
-                sb.Append(_magicTextArray[i %
-               2]);
+                sb.Append(_magicTextArray[i % 2]);
             }
             return sb.ToString();
         }
@@ -378,8 +375,7 @@ namespace ClassLibraryForQrCode
             var index = c;
             foreach (var block in list)
             {
-                for (int i = 0; i < block.Length;
-               i++)
+                for (int i = 0; i < block.Length; i++)
                 {
                     block[i] = tmp[index++];
                 }
@@ -431,17 +427,14 @@ namespace ClassLibraryForQrCode
         /// <summary>
         /// Magic
         /// </summary>
-        private static string Magic(List<byte[]>
-       a, List<byte[]> b)
+        private static string makeDataString(List<byte[] > a, List<byte[]> b)
         {
             var sb = new StringBuilder();
-            Magic(a, sb);
-            Magic(b, sb);
+            putlistInStringbuilder(a, sb);
+            putlistInStringbuilder(b, sb);
             return sb.ToString();
         }
-        private static readonly Dictionary<byte,
-       byte[]> _correctionLevelGeneratingPolynomial
-       = new()
+        private static readonly Dictionary<byte, byte[]> _correctionLevelGeneratingPolynomial = new()
         {
              // x^7 + α^87x^6 + α^229x^5 + \α^146x^4 + 
              // α^149x^3 + α^238x^2 + α^102x^ + \α^21
@@ -576,15 +569,13 @@ namespace ClassLibraryForQrCode
             214, 244, 234, 168, 80, 88, 175
 
        ];
-        private static void Magic(List<byte[]> a,
-       StringBuilder b)
+        private static void putlistInStringbuilder(List<byte[]> a, StringBuilder b)
         {
             if (a.Count == 1)
             {
                 foreach (var c in a[0])
                 {
-                    b.Append(Convert.ToString(c,
-                   2).PadLeft(8, '0'));
+                    b.Append(Convert.ToString(c,2).PadLeft(8, '0'));
                 }
                 return;
             }
@@ -594,9 +585,7 @@ namespace ClassLibraryForQrCode
                 foreach (var bytes in a)
                 {
                     if (i < bytes.Length)
-
-                        b.Append(Convert.ToString(bytes[i],
-                        2).PadLeft(8, '0'));
+                        b.Append(Convert.ToString(bytes[i],2).PadLeft(8, '0'));
                 }
             }
         }
@@ -605,46 +594,37 @@ namespace ClassLibraryForQrCode
         /// <summary>
         /// Magic
         /// </summary>
-        private static List<byte[]> Magic(this
-       QrCodeData a, Mask b)
+        private static List<byte[]> makeMatrixCode(this QrCodeData a, Mask b)
         {
-            var size = Magic((byte)a.Version,
-           BORDER);
+            var size = Magic((byte)a.Version,BORDER);
             var tmp = Magic(size)
             .Magic(a.Data, a.Version)
             .Magic1(Magic1(b))
-            .Magic(a.Version, b,
-           a.CorrectionLevel)
-            ;
+            .Magic(a.Version, b, a.CorrectionLevel);
             int posX1 = BORDER + 3;
             int posX2 = tmp.Count - BORDER - 4;
             int posY = BORDER + 3;
             tmp.Magic0()
             .Magic0(posX1, posY)
-            .Magic0(posX1, tmp[0].Length -
-           BORDER - 4)
+            .Magic0(posX1, tmp[0].Length - BORDER - 4)
             .Magic0(posX2, posY);
-            foreach (var x in
-           _alignmentsPosition[a.Version])
-                foreach (var y in
-               _alignmentsPosition[a.Version].Where(y =>
+            foreach (var x in _alignmentsPosition[a.Version])
+                foreach (var y in _alignmentsPosition[a.Version]
+                    .Where(y =>
                CanMagic(x + BORDER, y + BORDER, tmp)))
-                    tmp.Magic(x + BORDER, y +
-                   BORDER);
-            tmp.Magic(posX2 - 4, posY + 5, 0)
+                    tmp.Magic(x + BORDER, y + BORDER);
+            tmp.PutAbyteInPosition(posX2 - 4, posY + 5, 0)
             .Magic(a.Version);
             return tmp;
         }
         /// <summary>
         /// Magic
         /// </summary>
-        private static List<byte[]> Magic(this
-       QrCodeData a, ref Mask? b)
+        private static List<byte[]> makeMatrixCode(this QrCodeData a, ref Mask? b)
         {
             var res = Enumerable
             .Range(0, 8)
-            .Select(maskNumber =>
-           (maskNumber, (0, a.Magic((Mask)maskNumber))
+            .Select(maskNumber =>(maskNumber, (0, a.makeMatrixCode((Mask)maskNumber))
             .Magic()
             .Magic1()))
             .MinBy(x => x.Item2.a);
@@ -653,9 +633,7 @@ namespace ClassLibraryForQrCode
         }
 
  private static readonly
-Dictionary<(EccLevel correctionLevel, Mask
-maskNum), string> _masksAndCorrectionLevel =
-new()
+Dictionary<(EccLevel correctionLevel, Mask maskNum), string> _masksAndCorrectionLevel = new()
  {
  {(EccLevel.L, Mask.M101),
 "111011111000100"},
@@ -722,13 +700,10 @@ new()
  {(EccLevel.H, Mask.M010),
 "000100000111011"},
  };
-        private static List<byte[]> Magic(this
-       List<byte[]> a, QR b, Mask c, EccLevel d)
+        private static List<byte[]> Magic(this List<byte[]> a, QR b, Mask c, EccLevel d)
         {
-            var maskNumAndCorrectionLevel =
-           _masksAndCorrectionLevel[(d, c)];
-            Magic(a, b,
-           maskNumAndCorrectionLevel);
+            var maskNumAndCorrectionLevel = _masksAndCorrectionLevel[(d, c)];
+            Magic(a, b, maskNumAndCorrectionLevel);
             return a;
         }
         private static readonly Pair[]
@@ -745,8 +720,7 @@ new()
             (10, 04), (10, 03), (10, 02),
 
        ];
-        private static Pair[] Magic(this QR a,
-       int b)
+        private static Pair[] Magic(this QR a, int b)
         {
             var offset = 11 + (int)a * 4;
             return [(b, offset + 7), (b, offset + 6 ), (b, offset + 5),
@@ -755,14 +729,12 @@ new()
                  (offset + 2, b), (offset + 3, b), (offset + 4, b),
                  (offset + 5, b), (offset + 6, b), (offset + 7, b)];
         }
-        private static void Magic(Pair[] a,
-       List<byte[]> b, int c, char d)
+        private static void Magic(Pair[] a, List<byte[]> b, int c, char d)
         {
             (var x, var y) = (a[c].X, a[c].Y);
             b[y][x] = d != '1' ? ACTIVE : ZERO;
         }
-        private static List<byte[]> Magic(this
-       List<byte[]> a, QR b, string c)
+        private static List<byte[]> Magic(this List<byte[]> a, QR b, string c)
         {
             for (int i = 0; i < c.Length; i++)
             {
@@ -789,14 +761,13 @@ new()
             {
                 for (int j = 0; j < a.Count; j++)
                 {
-                    a[i][j] = (byte)(ACTIVE -
-                   a[i][j]);
+                    a[i][j] = (byte)(ACTIVE - a[i][j]);
                 }
             }
             return a;
         }
 
- private static List<byte[]> Magic(this List<byte[]> a, byte b)
+ private static List<byte[]> fillAllMatrixWithByte(this List<byte[]> a, byte b)
         {
             for (int i = 0; i < a.Count; i++)
             {
@@ -807,33 +778,27 @@ new()
             }
             return a;
         }
-        private static List<byte[]> Magic(this
-       List<byte[]> a, int b, int y)
+        private static List<byte[]> Magic(this List<byte[]> a, int b, int y)
         {
             Magic(a, b - 2, y - 2, 5, 0);
             Magic(a, b - 1, y - 1, 3, 1);
             a[b][y] = 0;
             return a;
         }
-        private static List<byte[]> Magic0(this
-       List<byte[]> a, bool b = false)
+        private static List<byte[]> Magic0(this List<byte[]> a, bool b = false)
         {
-            for (int i = BORDER; i < a.Count -
-           BORDER - 6; i++)
+            for (int i = BORDER; i < a.Count - BORDER - 6; i++)
             {
                 a[i][BORDER + 6] = !b ? (byte)(i
                % 2) : ZERO;
             }
-            for (int i = BORDER; i < a[0].Length
-           - BORDER - 6; i++)
+            for (int i = BORDER; i < a[0].Length - BORDER - 6; i++)
             {
-                a[BORDER + 6][i] = !b ? (byte)(i
-               % 2) : ZERO;
+                a[BORDER + 6][i] = !b ? (byte)(i % 2) : ZERO;
             }
             return a;
         }
-        private static List<byte[]> Magic(this
-       List<byte[]> a, int b, int c, int d, byte e)
+        private static List<byte[]> Magic(this List<byte[]> a, int b, int c, int d, byte e)
         {
             for (int i = 0; i < d; i++)
             {
@@ -844,14 +809,12 @@ new()
             }
             return a;
         }
-        private static List<byte[]> Magic(this
-       List<byte[]> a, int b, int c, byte d)
+        private static List<byte[]> PutAbyteInPosition(this List<byte[]> a, int b, int c, byte d)
         {
             a[b][c] = d;
             return a;
         }
-        private static readonly Dictionary<QR,
-       int[]> _alignmentsPosition = new()
+        private static readonly Dictionary<QR, int[]> _alignmentsPosition = new()
         {
              {QR.V1, []},
              {QR.V2, [18]},
@@ -877,51 +840,50 @@ new()
         private static readonly Dictionary<QR,
        string> _versionCodes = new()
         {
- // 000010 ▄
- // 111101 █▀▀▄▀
- {QR.V7, "000010011110100110"},
- // 010001 ▄ ▄
- // 011100 ▄██▀ 
- {QR.V8, "010001011100111000"},
- // 110111 ▄▄ ▄▄▄
- // 011000 ▀▀▄
- {QR.V9, "110111011000000100"},
- // 101001 ▄ ▄ ▄
- // 111110 ▀▀▀▀▀
- {QR.V10, "101001111110000000"},
- // 001111 ▄▄▄▄
- // 111010 ███▄▀
- {QR.V11, "001111111010111100"},
- // 001101 ▄▄ ▄
- // 100100 ▀▄▄▀▄
- {QR.V12, "001101100100011010"},
- // 101011 ▄ ▄ ▄▄ 
- // 100000 █ ▄▄
- {QR.V13, "101011100000100110"},
- // 110101 ▄▄ ▄ ▄
- // 000110 ▄▀ █▄▀
- {QR.V14, "110101000110100010"},
- // 010011 ▄ ▄▄
- // 000010 ▄▄▄█
- {QR.V15, "010011000010011110"},
- // 011100 ▄▄▄
- // 010001 █▄▄ ▀
- {QR.V16, "011100010001011100"},
- // 111010 ▄▄▄ ▄
- // 010101 ▄▀ ▀ ▀
- {QR.V17, "111010010101100000"},
- // 100100 ▄ ▄
- // 110011 █▀ ▄▀▀
- {QR.V18, "100100110011100100"},
- // 000010 ▄
- // 110111 ▀█▄▀▀▀
- {QR.V19, "000010110111011000"},
- // 000000 
- // 101001 █▄█▄▄▀
- {QR.V20, "000000101001111110"},
+             // 000010 ▄
+             // 111101 █▀▀▄▀
+             {QR.V7, "000010011110100110"},
+             // 010001 ▄ ▄
+             // 011100 ▄██▀ 
+             {QR.V8, "010001011100111000"},
+             // 110111 ▄▄ ▄▄▄
+             // 011000 ▀▀▄
+             {QR.V9, "110111011000000100"},
+             // 101001 ▄ ▄ ▄
+             // 111110 ▀▀▀▀▀
+             {QR.V10, "101001111110000000"},
+             // 001111 ▄▄▄▄
+             // 111010 ███▄▀
+             {QR.V11, "001111111010111100"},
+             // 001101 ▄▄ ▄
+             // 100100 ▀▄▄▀▄
+             {QR.V12, "001101100100011010"},
+             // 101011 ▄ ▄ ▄▄ 
+             // 100000 █ ▄▄
+             {QR.V13, "101011100000100110"},
+             // 110101 ▄▄ ▄ ▄
+             // 000110 ▄▀ █▄▀
+             {QR.V14, "110101000110100010"},
+             // 010011 ▄ ▄▄
+             // 000010 ▄▄▄█
+             {QR.V15, "010011000010011110"},
+             // 011100 ▄▄▄
+             // 010001 █▄▄ ▀
+             {QR.V16, "011100010001011100"},
+             // 111010 ▄▄▄ ▄
+             // 010101 ▄▀ ▀ ▀
+             {QR.V17, "111010010101100000"},
+             // 100100 ▄ ▄
+             // 110011 █▀ ▄▀▀
+             {QR.V18, "100100110011100100"},
+             // 000010 ▄
+             // 110111 ▀█▄▀▀▀
+             {QR.V19, "000010110111011000"},
+             // 000000 
+             // 101001 █▄█▄▄▀
+             {QR.V20, "000000101001111110"},
         };
-        private static List<byte[]> Magic(this
-       List<byte[]> a, QR b, bool c = false)
+        private static List<byte[]> Magic(this List<byte[]> a, QR b, bool c = false)
         {
             if ((byte)b < 7) return a;
             int pos = 0;
@@ -960,25 +922,20 @@ new()
            (int)a * 4;
             int posY2 = BORDER + cubeSize +
            (int)a * 4;
-            tmp.Magic(posX1, posY1, cubeSize,
-           ZERO)
-            .Magic(posX1, posY2, cubeSize,
-           ZERO)
-            .Magic(posX2, posY1, cubeSize,
-           ZERO);
+            tmp.Magic(posX1, posY1, cubeSize, ZERO)
+            .Magic(posX1, posY2, cubeSize, ZERO)
+            .Magic(posX2, posY1, cubeSize, ZERO);
             foreach (var x in
            _alignmentsPosition[a])
                 foreach (var y in
-               _alignmentsPosition[a].Where(y => CanMagic(x
-               + BORDER, y + BORDER, tmp)))
+               _alignmentsPosition[a].Where(y => CanMagic(x + BORDER, y + BORDER, tmp)))
                     tmp.Magic(x + BORDER - 2, y +
                    BORDER - 2, 5, 0);
             tmp.Magic0(true)
             .Magic(a, true);
             return tmp;
         }
-        private static bool CanMagic(int x, int
-       y, List<byte[]> matrix)
+        private static bool CanMagic(int x, int y, List<byte[]> matrix)
         => !(x < POSITION_DETECTION + BORDER
        + 1 && y < POSITION_DETECTION + BORDER + 1 ||
         x < POSITION_DETECTION +
@@ -987,8 +944,7 @@ new()
         x > matrix.Count -
        POSITION_DETECTION - BORDER && y <
        POSITION_DETECTION + BORDER + 1);
-        private static List<byte[]> Magic(this
-       List<byte[]> a, string b, QR c)
+        private static List<byte[]> Magic(this List<byte[]> a, string b, QR c)
         {
             var blockedModules = Magic(c);
             var size = a.Count - BORDER * 2;
@@ -1004,136 +960,114 @@ new()
                     var row = up ? size + BORDER
                    - i - 1 : i + BORDER;
                     if (index < count &&
-                   !blockedModules.IsMagic(row, column))
-                        Magic(a, blockedModules,
+                   !blockedModules.elementIsZERO(row, column))
+                        makeElementActiveOrZero(a, blockedModules,
                        row, column, b[index++]);
                     if (index < count && column >
-                   0 && !blockedModules.IsMagic(row, column -
+                   0 && !blockedModules.elementIsZERO(row, column -
                    1))
-                        Magic(a, blockedModules,
+                        makeElementActiveOrZero(a, blockedModules,
                        row, column - 1, b[index++]);
                 }
                 up = !up;
             }
             return a;
         }
-        private static bool IsMagic(this
-       List<byte[]> a, int b, int c)
+        private static bool elementIsZERO(this List<byte[]> a, int b, int c)
         {
             return a[b][c] == ZERO;
         }
-        private static void Magic(List<byte[]> a,
-       List<byte[]> b, int c, int d, char e)
+        private static void makeElementActiveOrZero(List<byte[]> a, List<byte[]> b, int c, int d, char e)
         {
             b[c][d] = ZERO;
             a[c][d] = e != '1' ? ACTIVE : ZERO;
         }
-        private static bool Magic0((int x, int y)
-       m) => (m.x + m.y) % 2 == 0;
-        private static bool Magic1((int x, int y)
-       m) => m.y % 2 == 0;
-        private static bool Magic2((int x, int y)
-       m) => m.x % 3 == 0;
-        private static bool Magic3((int x, int y)
-       m) => (m.x + m.y) % 3 == 0;
-        private static bool Magic4((int x, int y)
-       m) => (m.x / 3 + m.y / 2) % 2 == 0;
-        private static bool Magic5((int x, int y)
-       m) => (m.x * m.y) % 2 + (m.x * m.y) % 3 == 0;
-        private static bool Magic6((int x, int y)
-       m) => ((m.x * m.y) % 2 + (m.x * m.y) % 3) % 2
-       == 0;
-        private static bool Magic7((int x, int y)
-       m) => ((m.x * m.y) % 3 + (m.x + m.y) % 2) % 2
-       == 0;
+        private static bool divided0((int x, int y) m) => (m.x + m.y) % 2 == 0;
+        private static bool divided1((int x, int y) m) => m.y % 2 == 0;
+        private static bool divided2((int x, int y) m) => m.x % 3 == 0;
+        private static bool divided3((int x, int y) m) => (m.x + m.y) % 3 == 0;
+        private static bool divided4((int x, int y) m) => (m.x / 3 + m.y / 2) % 2 == 0;
+        private static bool divided5((int x, int y) m) => (m.x * m.y) % 2 + (m.x * m.y) % 3 == 0;
+        private static bool divided6((int x, int y) m) => ((m.x * m.y) % 2 + (m.x * m.y) % 3) % 2 == 0;
+        private static bool divided7((int x, int y) m) => ((m.x * m.y) % 3 + (m.x + m.y) % 2) % 2 == 0;
         private static Predicate<(int, int)>
-       Magic1(Mask a = Mask.M111)
-        => a switch
+       Magic1(Mask a = Mask.M111) => a switch
         {
-            Mask.M101 => Magic0,
-            Mask.M100 => Magic1,
-            Mask.M111 => Magic2,
-            Mask.M110 => Magic3,
-            Mask.M001 => Magic4,
-            Mask.M000 => Magic5,
-            Mask.M011 => Magic6,
-            Mask.M010 => Magic7,
+            Mask.M101 => divided0,
+            Mask.M100 => divided1,
+            Mask.M111 => divided2,
+            Mask.M110 => divided3,
+            Mask.M001 => divided4,
+            Mask.M000 => divided5,
+            Mask.M011 => divided6,
+            Mask.M010 => divided7,
             _ => throw new
-    ArgumentOutOfRangeException("Incorrect Mask Number")
+            ArgumentOutOfRangeException("Incorrect Mask Number")
        
         };
-        private static List<byte[]> Magic1(this
-       List<byte[]> a, Predicate<(int, int)> b)
+        private static List<byte[]> Magic1(this List<byte[]> a, Predicate<(int, int)> b)
         {
-            for (int x = BORDER; x < a.Count -
-           BORDER; x++)
+            for (int x = BORDER; x < a.Count - BORDER; x++)
             {
-                for (int y = BORDER; y < a.Count
-               - BORDER; y++)
+                for (int y = BORDER; y < a.Count - BORDER; y++)
                 {
-                    if (b((y - BORDER, x -
-                   BORDER)))
-                        a[x][y] = (byte)(ACTIVE -
-                       a[x][y]);
+                    if (b((y - BORDER, x - BORDER))) a[x][y] = (byte)(ACTIVE - a[x][y]);
                 }
             }
             return a;
         }
-        private static (int a, List<byte[]> b)
-       Magic(this (int a, List<byte[]> b) a)
- {
- var length = 5;
-        var s = 0;
-        int cnt;
-        int current;
- for (int x = BORDER; x<a.b.Count -
-BORDER; x++)
- {
- cnt = 0;
- current = 3;
- for (int y = BORDER; y<
-a.b.Count - BORDER; y++)
- {
- if (a.b[x][y] == current) 
-cnt++;
- else
- {
- if (cnt >= length)
- s += cnt - 2;
- current = a.b[x][y];
- cnt = 0;
- }
-}
- }
- for (int y = BORDER; y < a.b.Count -
-BORDER; y++)
-{
-    cnt = 0;
-    current = 3;
-    for (int x = BORDER; x < a.b.Count
-   - BORDER; x++)
-    {
-        if (a.b[x][y] == current)
+        private static (int a, List<byte[]> b)  Magic(this (int a, List<byte[]> b) a)
+             {
+             var length = 5;
+                    var s = 0;
+                    int cnt;
+                    int current;
+             for (int x = BORDER; x<a.b.Count -
+            BORDER; x++)
+             {
+             cnt = 0;
+             current = 3;
+             for (int y = BORDER; y<
+            a.b.Count - BORDER; y++)
+             {
+             if (a.b[x][y] == current) 
             cnt++;
-        else
-        {
-            if (cnt >= length)
-                s += cnt - 2;
-            current = a.b[x][y];
-            cnt = 0;
-        }
-    }
-}
+             else
+             {
+             if (cnt >= length)
+             s += cnt - 2;
+             current = a.b[x][y];
+             cnt = 0;
+             }
+            }
+             }
+             for (int y = BORDER; y < a.b.Count -
+            BORDER; y++)
+            {
+                cnt = 0;
+                current = 3;
+                for (int x = BORDER; x < a.b.Count
+               - BORDER; x++)
+                {
+                    if (a.b[x][y] == current)
+                        cnt++;
+                    else
+                    {
+                        if (cnt >= length)
+                            s += cnt - 2;
+                        current = a.b[x][y];
+                        cnt = 0;
+                    }
+                }
+            }
 
-return (s + a.a, a.b);
- }
- private static (int a, List<byte[]> b)
-Magic1(this (int a, List<byte[]> b) a)
+            return (s + a.a, a.b);
+             }
+ private static (int a, List<byte[]> b) Magic1(this (int a, List<byte[]> b) a)
 {
     var cntActive = 0.0;
     var cntTotal = 0.0;
-    for (int x = BORDER; x < a.b.Count -
-   BORDER; x++)
+    for (int x = BORDER; x < a.b.Count - BORDER; x++)
     {
         for (int y = BORDER; y <
        a.b.Count - BORDER; y++)
@@ -1145,33 +1079,27 @@ Magic1(this (int a, List<byte[]> b) a)
     }
     double s = cntActive / cntTotal;
     s = s * 100 - 50;
-    return (Math.Abs((int)s) * BORDER +
-   a.a, a.b);
+    return (Math.Abs((int)s) * BORDER + a.a, a.b);
 }
         #endregion
         #region Magic
         /// <summary>
         /// Magic
         /// </summary>
-        private static string Magic(this
-        List<byte[]> a, bool b)
+        private static string makeFinalString(this List<byte[]> a, bool b)
         {
             var sb = new StringBuilder();
             var length = a.Count % 2 == 1 ?
            a.Count + 1 : a.Count;
-            for (int row = 0; row < length; row
-           += 2)
+            for (int row = 0; row < length; row += 2)
             {
-                for (int column = 0; column <
-               a[0].Length; column++)
+                for (int column = 0; column <  a[0].Length; column++)
                 {
-                    byte scanModule1 =
-                   a[row][column];
-                    byte scanModule2 = row <
-                   a.Count - 1 ? a[row + 1][column] : ACTIVE;
+                    byte scanModule1 = a[row][column];
+                    byte scanModule2 = row < a.Count - 1 ? a[row + 1][column] : ACTIVE;
                     var c = b
-                    ? Magic((scanModule1, scanModule2))
-                    : Magic([scanModule1, scanModule2]);
+                    ? chooseSimbol((scanModule1, scanModule2))
+                    : chooseSimbol([scanModule1, scanModule2]);
                     sb.Append(c);
                 }
                 sb.AppendLine();
@@ -1198,8 +1126,7 @@ Magic1(this (int a, List<byte[]> b) a)
         /// Недопустимый параметр
         /// </summary>
         private const byte NA = 0;
-        private static char Magic(byte[] a)
-        => (a[0], a[1]) switch
+        private static char chooseSimbol(byte[] a) => (a[0], a[1]) switch
         {
             (0, 0) => ' ',
             (0, 1) => '▄',
@@ -1208,9 +1135,7 @@ Magic1(this (int a, List<byte[]> b) a)
             _ => throw new
             NotImplementedException(),
         };
-        private static char Magic((byte a, byte
-        b) c)
-        => (c.a, c.b) switch
+        private static char chooseSimbol((byte a, byte b) c) => (c.a, c.b) switch
         {
             (1, 1) => ' ',
             (1, 0) => '▄',
@@ -1219,15 +1144,14 @@ Magic1(this (int a, List<byte[]> b) a)
             _ => throw new
             NotImplementedException(),
         };
-         private static List<byte[]> Magic(int a,
-        byte b = ACTIVE)
+         private static List<byte[]> Magic(int a, byte b = ACTIVE)
         {
             List<byte[]> qrCodeMatrix = [];
             for (int i = 0; i < a; i++)
             {
                 qrCodeMatrix.Add(new byte[a]);
             }
-            return qrCodeMatrix.Magic(b);
+            return qrCodeMatrix.fillAllMatrixWithByte(b);
         }
         private static int Magic(byte a, int b)
         {
