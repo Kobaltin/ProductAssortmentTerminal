@@ -1,48 +1,53 @@
 ﻿using System;
 using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace ClassLibraryForQrCode
 {
     public class QRcode: IQrCode
     {
-        public static QrCodeType modeQrCode { get; set; }
-        private string textForCoding;
-        private QR qrCodeVersion = QR.V1;     
-        private EccLevel? errCorelation; 
-        private Mask? mask;             
-        private string stringOfCode;
+        private QR qrCodeVersion = QR.V1;
 
-        public string getQR() => ToString();
+        private EccLevel? errCorelation;
 
-        public string getQrCodeInformation()
+        private Mask? mask;
+
+        private EncodingMode mode;
+
+
+        private string code;
+        public string Code 
         {
-            return $"Версия QR кода: {qrCodeVersion}\nКорелляция ошибки: {errCorelation}\nМаска: {mask}\n";
-
+            get 
+            {
+                return code;
+            }
         }
-        public string getTextInformation()
+        private string text;
+        public string Text 
         {
-            return textForCoding;
-        }
-
-        public void setNewText(string newText)
-        {
-            textForCoding = newText;
-            EncodingMode encodingMode = EncodingMode.Numeric;
-            qrCodeVersion = QR.V1;
-            errCorelation = default;
-            mask = default;
-
-            stringOfCode = textForCoding.ToQrCode(ref qrCodeVersion, ref encodingMode,ref errCorelation,ref mask);
+            get 
+            {
+                return text;
+            }
+            set
+            {
+                if (text != value && value!=null)
+                {
+                    text = value;
+                    code = value.ToQrCode(ref qrCodeVersion, ref mode, ref errCorelation, ref mask);
+                }
+            }
         }
         
         public override string ToString()
         {
-            switch (modeQrCode)
+            switch (IQrCode.QrCodeTy)
             {
-                case QrCodeType.Text: return textForCoding; break;
-                case QrCodeType.QrCode:return stringOfCode; break;
-                case QrCodeType.Full:return $"{textForCoding}\n{stringOfCode}";break;
+                case QrCodeType.Text: return Text; break;
+                case QrCodeType.QrCode:return Code; break;
+                case QrCodeType.Full:return $"{Text}\n{Code}";break;
                 default: return "Неизвестный формат текста";
 
             }
