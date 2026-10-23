@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="AssortimentFormationLibrary/AssortimentFormationLibrary.csproj" Id="292afa2e-496e-48ed-b817-4c4fdf7424e3" />
   <Project Path="ClassLibraryForQrCode/ClassLibraryForQrCode.csproj" />
   <Project Path="ConsoleAppForShow/ConsoleAppForShow.csproj" />
+  <Project Path="WarehouseClassLibrary/WarehouseClassLibrary.csproj" Id="79d6afc1-5bcb-4583-a97e-4c5e1f6a0678" />
 </Solution>
