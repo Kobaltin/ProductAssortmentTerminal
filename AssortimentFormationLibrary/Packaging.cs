@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace AssortimentFormationLibrary
 {
-    internal class Pacaging: Product
+    public class Pacaging: Product
     {
         private IProduct product;
         public Pacaging(IProduct prod)

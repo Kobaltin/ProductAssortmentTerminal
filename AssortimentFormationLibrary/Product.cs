@@ -10,10 +10,10 @@ namespace AssortimentFormationLibrary
     
     public abstract class Product:IProduct
     {
-        private IQrCode qr;
         /// <summary>
         /// агрегация
         /// </summary>
+        private IQrCode qr;
         
         public string Code
         { 
@@ -21,17 +21,20 @@ namespace AssortimentFormationLibrary
             {
                 return qr.Code;
             } 
-            private set 
+            set 
             {
                 qr.Text = value;
             }
         }
+        /// <summary>
+        /// Реализация свойства QR кода
+        /// </summary> 
         private void putStringInQr(int id, double price) {
                 Code = $"{id}:{price}";
         }
         /// <summary>
-        /// Реализация свойства QR кода
-        /// </summary> 
+        /// Реализация свойства, характеризующее идентификатор
+        /// </summary>
         private int _id;
         public virtual int Id
         {
@@ -46,7 +49,7 @@ namespace AssortimentFormationLibrary
             }
         }
         /// <summary>
-        /// Реализация свойства, характеризующее идентификатор
+        /// Реализация свойства наимеенования продукта
         /// </summary>
         private double _price;
         public virtual double Price {
@@ -60,16 +63,16 @@ namespace AssortimentFormationLibrary
         }
         public string ProductName { get; private set; }
         /// <summary>
-        /// Реализация свойства наимеенования продукта
+        /// Делаем свойство типа абстрактным
         /// </summary>
 
         public abstract string Type { get;}
         /// <summary>
-        /// Делаем свойство типа абстрактным
+        /// Делаем свойство описания абстрактным
         /// </summary>
         public abstract string Description { get;}
         /// <summary>
-        /// Делаем свойство описания абстрактным
+        /// Конструктор 
         /// </summary>
         protected Product(int id, double price, string productName, IQrCode qr1)
         {
@@ -80,14 +83,13 @@ namespace AssortimentFormationLibrary
             putStringInQr(Id, Price);
         }
         /// <summary>
-        /// Конструктор 
+        /// Строковое представление
         /// </summary>
         public override string ToString()
         {
             return $"Тип товара:{Type}\nИмя товара:{ProductName}\nОписание:\n{Description}Код:\n{qr.ToString()}\n";
         }
-        /// <summary>
-        /// Строковое представление
-        /// </summary>
+
+        
     }
 }

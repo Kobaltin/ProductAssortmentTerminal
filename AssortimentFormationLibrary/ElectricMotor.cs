@@ -7,7 +7,7 @@ using ClassLibraryForQrCode;
 
 namespace AssortimentFormationLibrary
 {
-    internal class ElectricMotor:Product
+    public class ElectricMotor:Product
     {
         public double PowerKw { get; set; }
         public double VoltageV { get; set; }

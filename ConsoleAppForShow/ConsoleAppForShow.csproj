@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AssortimentFormationLibrary\AssortimentFormationLibrary.csproj" />
     <ProjectReference Include="..\ClassLibraryForQrCode\ClassLibraryForQrCode.csproj" />
+    <ProjectReference Include="..\WarehouseClassLibrary\WarehouseClassLibrary.csproj" />
   </ItemGroup>
 
 </Project>
