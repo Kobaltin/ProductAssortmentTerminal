@@ -15,7 +15,7 @@ namespace WarehouseClassLibrary
         {
             Console.Clear();
             Console.WriteLine("Лабораторная работа 3");
-            IQrCode.QrCodeTy = QrCodeType.Full;
+            IQrCode.QrCodeTy = QrCodeType.Text;
             IProduct motor1 = new ElectricMotor(1, 20000, "HCD12", 1000, 220);
             var motor2 = new Pacaging(new ElectricMotor(2, 23000, "HCD11", 12000, 220));
             IWarehouse<IProduct> assortiment1 = (Warehouse<IProduct>)2;

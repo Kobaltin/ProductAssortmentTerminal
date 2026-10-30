@@ -1,7 +1,7 @@
 ﻿using AssortimentFormationLibrary;
 namespace WarehouseClassLibrary
 {
-    public interface IWarehouse<T> where T : IProduct
+    public interface IWarehouse<T> where T :class, IProduct
         {/// <summary>
          /// Публичное свойство идентификатора
          /// </summary>

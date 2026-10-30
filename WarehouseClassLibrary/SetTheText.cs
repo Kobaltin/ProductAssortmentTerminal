@@ -17,10 +17,10 @@ namespace WarehouseClassLibrary
         /// <summary>
         /// Метод расширения, меняющий строковое представение зная склад
         /// </summary>
-        public static void setText<T>(this IProduct product, IWarehouse<T> wh) where T: IProduct
+        public static void setText<T>(this IProduct product, IWarehouse<T> wh) where T:class, IProduct
         {
             int position = wh.Find(product.Id);
-            if(position > 0)
+            if(position >= 0)
             {
                 product.setText(wh.Id, position);
             } 

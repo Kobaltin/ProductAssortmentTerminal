@@ -9,7 +9,7 @@ using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace WarehouseClassLibrary
 {
-    internal class Warehouse<T> : IWarehouse<T> where T : IProduct
+    internal class Warehouse<T> : IWarehouse<T> where T : class, IProduct
     {
         /// <summary>
         /// Заменить строковое представение всех продуктов в контейнере, зная новый идентификатор склада
@@ -109,8 +109,7 @@ namespace WarehouseClassLibrary
             {
                 if (_array[i] == null)
                 {
-                    _array[i] = product;
-                    _array[i].setText(Id,i);
+                    this[i] = product;
                     break;
                 }
             }
@@ -122,8 +121,7 @@ namespace WarehouseClassLibrary
         {
             if (index < Size && index >= 0)
             {
-                _array[index] = product;
-                _array[index].setText(Id, index);
+                this[index] = product;
             }
         }
         /// <summary>
@@ -141,10 +139,8 @@ namespace WarehouseClassLibrary
             if (firstIndex < Size && firstIndex >= 0 && secondindex < Size && secondindex >= 0)
             {
                 T tmp = _array[firstIndex];
-                _array[firstIndex] = _array[secondindex];
-                _array[firstIndex].setText(Id, firstIndex);
-                _array[secondindex] = tmp;
-                _array[secondindex].setText(Id, secondindex);
+                this[firstIndex] = _array[secondindex];
+                this[secondindex] = tmp;
             }
         }
         /// <summary>
